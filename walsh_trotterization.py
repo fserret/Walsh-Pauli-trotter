@@ -43,6 +43,9 @@ def create_initial_wavefunction(N, initial_state="soliton"):
 
     elif initial_state == "soliton": 
         psi = psi0_soliton(x_values, L, a=2.0, x0=0.5, v=0.0)    
+    elif initial_state == "cos":
+        psi = np.exp(1j*2*np.pi*x_values).real
+        psi = psi / np.linalg.norm(psi)  
     else:
         raise ValueError(f"Unknown initial state: {initial_state}")
  
@@ -85,7 +88,7 @@ def create_kinetic_wp_circuit(N, dt, walsh_factor=None, power_factor=None):
         # exp(-i * coeff * Z_i Z_j * dt)
         phase = coeff * dt  
 
-        z_qubits = [i for i, p in enumerate(pauli_str) if p == 'Z']   
+        z_qubits = [i for i, p in enumerate(pauli_str[::-1]) if p == 'Z']   ## QFT inverse the bitstring
  
         if len(z_qubits) == 2:
             # ZZ interaction: exp(-i θ Z_i Z_j) = CNOT_ij RZ(2θ) CNOT_ij
@@ -94,6 +97,7 @@ def create_kinetic_wp_circuit(N, dt, walsh_factor=None, power_factor=None):
             qc.cx(z_qubits[0], z_qubits[1])
     
     return qc
+
 
 def create_potential_wp_circuit(N, dt, V0=1.0, potential_factor=None):
     
@@ -116,39 +120,43 @@ def create_potential_wp_circuit(N, dt, V0=1.0, potential_factor=None):
     
     return qc
 
-def create_trotter_step_circuit(N, dt, V0=1.0, walsh_factor=None, power_factor=None, potential_factor=None):
+from walsh_pauli_decomposition import decompose_potential_term, decompose_laplacian_term
+from circuit_constructor import create_pauli_rotation_circuit, create_fourier_basis_rotation_circuit
+
+def create_trotter_step_circuit(N, dt, V0=1.0, interpolate=False):
  
     qc = QuantumCircuit(N)
     
     # Second-order Trotter: exp(-i V dt/2) exp(-i K dt) exp(-i V dt/2)
     
-    # First half of potential evolution: exp(-i V_WP dt/2)
+    #if V0 != 0:
+    #    potential_circuit_half = create_potential_wp_circuit(N, dt/2, V0, potential_factor)
+    #    qc.compose(potential_circuit_half, inplace=True)
     if V0 != 0:
-        potential_circuit_half = create_potential_wp_circuit(N, dt/2, V0, potential_factor)
-        qc.compose(potential_circuit_half, inplace=True)
+        potential_decomp = decompose_potential_term(N, V0, interpolate=interpolate)
+        potential_circuit_half =  create_pauli_rotation_circuit(N, dt/2, potential_decomp)
+        
+        
+    ##kinetic_circuit = create_kinetic_wp_circuit(N, dt, walsh_factor, power_factor)
+    kinetic_decomp = decompose_laplacian_term(N, interpolate=interpolate)
+    kinetic_circuit = create_fourier_basis_rotation_circuit(N, dt, kinetic_decomp)
     
-    # Kinetic evolution in momentum space: exp(-i K_WP dt)
-    qft_gate = QFTGate(N) 
-    qc.append(qft_gate, range(N))
-    
-    #qc.x(0)  
-    
-    kinetic_circuit = create_kinetic_wp_circuit(N, dt, walsh_factor, power_factor)
-    qc.compose(kinetic_circuit, inplace=True)
-     
-    #qc.x(0)  
 
-    qft_gate = QFTGate(N) 
-    qc.append(qft_gate, range(N))
-  
+    # Trotter step
+    # First half of potential evolution
+    if V0 != 0:
+        qc.compose(potential_circuit_half, inplace=True)
+        
+    # kinetic evolution
+    qc.compose(kinetic_circuit, inplace=True)
+    
     # Second half of potential evolution: exp(-i V_WP dt/2)
     if V0 != 0:
-        potential_circuit_half2 = create_potential_wp_circuit(N, dt/2, V0, potential_factor)
-        qc.compose(potential_circuit_half2, inplace=True)
+        qc.compose(potential_circuit_half, inplace=True)
     
     return qc
 
-def simulate_quantum_time_evolution(N, T_final=1.0, n_steps=50, V0=1.0, initial_state="gaussian", walsh_factor=None, power_factor=None, potential_factor=None, use_quantum_encoding=True):
+def simulate_quantum_time_evolution(N, T_final=1.0, n_steps=50, V0=0.0, initial_state="gaussian", use_quantum_encoding=True,interpolate=False):
    
     dt = T_final / n_steps
     times = np.linspace(0, T_final, n_steps + 1)
@@ -173,7 +181,7 @@ def simulate_quantum_time_evolution(N, T_final=1.0, n_steps=50, V0=1.0, initial_
     
     print(f"Walsh-Pauli: N={N}, steps={n_steps}")
       
-    trotter_circuit = create_trotter_step_circuit(N, dt, V0, walsh_factor, power_factor, potential_factor)
+    trotter_circuit = create_trotter_step_circuit(N, dt, V0,interpolate=interpolate)
      
     if use_quantum_encoding:
         # Use quantum amplitude encoded initial state
@@ -296,16 +304,9 @@ def visualize_time_evolution(times, probability_evolution, N, save_prefix="walsh
     plt.show()
  
 
-def show_simulation_circuit(N, dt, V0=0):
-    walsh_factor = (np.pi**2) / 6
-    power_factor = 4**N
-    potential_factor = V0 / 12
-     
-    qft_circuit = QuantumCircuit(N)
-     
-    kinetic_circuit = create_kinetic_wp_circuit(N, dt, walsh_factor, power_factor)
-    potential_circuit = create_potential_wp_circuit(N, dt, V0, potential_factor)
-    trotter_circuit = create_trotter_step_circuit(N, dt, V0, walsh_factor, power_factor, potential_factor)
+def show_simulation_circuit(N, dt, V0=0,interpolate=False):
+    
+    trotter_circuit = create_trotter_step_circuit(N, dt, V0, interpolate=interpolate)
      
     fig = trotter_circuit.draw(output='mpl', fold=0)
     plt.title(f'Walsh-Pauli Trotter Circuit (N={N})')
@@ -316,25 +317,21 @@ def show_simulation_circuit(N, dt, V0=0):
  
 if __name__ == "__main__":
 
-    N = 10   
+    N = 5
     T_final = 1 
     dt = 0.01 
     n_steps = int(T_final / dt)
-    V0 = 0   
+    V0 = 1000
     initial_state = "gaussian"   
-     
-    walsh_factor = (np.pi**2) / 6  
-    power_factor = 4**N         
-    potential_factor = V0 / 12    
-      
+    interpolate = True
+    
  
     simulation_circuit = show_simulation_circuit(N, dt, V0)
       
  
     times_wp, psi_wp, prob_wp = simulate_quantum_time_evolution(
             N=N, T_final=T_final, n_steps=n_steps, V0=V0, initial_state=initial_state,
-            walsh_factor=walsh_factor, power_factor=power_factor, potential_factor=potential_factor,
-            use_quantum_encoding=True  
+            use_quantum_encoding=True, interpolate=interpolate 
         )
      
      
