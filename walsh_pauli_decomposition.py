@@ -41,3 +41,12 @@ def decompose_laplacian_term(N, interpolate=False):
     decomp = {pauli_str: factor * coeff for pauli_str, coeff in decomp.items()}
     return decomp
 
+def decompose_interaction_term(N,kappa=1):
+    factor = kappa
+    decomp = {}
+    decomp['I' * 2*N]=factor
+    pauli_k = lambda k: ''.join('Z' if format(k, f'0{int(N)}b')[::-1][i] == '1' else 'I' for i in range(N))*2
+    for k1 in range(1, 2**N):
+        decomp[pauli_k(k1)]= factor
+    return decomp
+
