@@ -9,10 +9,9 @@ m = 1.0
 x = np.linspace(0, L, N, endpoint=False)
 dx = L / N
 
-V_0 = 0.0
-V = V_0 * np.sin(2 * np.pi * x / L)      
-#V = V_0 * (x - 0.5)**2               
-
+V_0 = 1000.0
+#V = V_0 * np.sin(2 * np.pi * x / L)      
+V = V_0 * (x - 0.5)**2
 g = 0.0
 initial_state = "gaussian"
 
@@ -41,29 +40,24 @@ elif initial_state == "dirac":
     psi0 = np.zeros_like(x)
     psi0[center] = 1.0 
  
-k_wave = np.fft.fftfreq(N, d=dx)  #2.0 * np.pi 
-k_wave = np.fft.fftshift(k_wave)
+#k_wave = np.fft.fftfreq(N, d=dx)  #2.0 * np.pi 
+#k_wave = np.fft.fftshift(k_wave)
+k_wave = np.asarray([k for k in range(N//2)]+ [-(N//2-k) for k in range(N//2)])
 print(k_wave)
 
 EVOLVE_DT = 0.01
-kinetic_phase_dt = np.exp(-1j * (hbar * (k_wave**2) / (2.0 * m)) * EVOLVE_DT)
+kinetic_phase_dt = np.exp(-1j * (hbar *4*np.pi**2 *(k_wave**2) / (2.0 * m)) * EVOLVE_DT)
 
-def evolve_step(psi, dt=EVOLVE_DT, g=g, enable_potential=True):
-    if enable_potential:
-        interaction_potential = V + g * np.abs(psi)**2
-        psi = np.exp(-1j * interaction_potential * dt / 2.0) * psi
-
+def evolve_step(psi, dt=EVOLVE_DT, g=g, V=V):
+    
+    interaction_potential = V + g * np.abs(psi)**2
+    
+    psi = np.exp(-1j * interaction_potential * dt / 2.0) * psi
     psi_k = np.fft.fft(psi)
-    if dt == EVOLVE_DT:
-        psi_k *= kinetic_phase_dt
-    else:
-        phase = np.exp(-1j * (hbar * (k_wave**2) / (2.0 * m)) * dt)
-        psi_k *= phase
+    phase = np.exp(-1j * (hbar *4*np.pi**2* (k_wave**2) / (2.0 * m)) * dt)
+    psi_k *= phase
     psi = np.fft.ifft(psi_k)
-
-    if enable_potential:
-        interaction_potential = V + g * np.abs(psi)**2
-        psi = np.exp(-1j * interaction_potential * dt / 2.0) * psi
+    psi = np.exp(-1j * interaction_potential * dt / 2.0) * psi
  
     #norm = np.sqrt(np.sum(np.abs(psi)**2) * dx)
     norm = np.linalg.norm(psi)

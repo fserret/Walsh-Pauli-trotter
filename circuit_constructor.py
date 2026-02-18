@@ -8,7 +8,7 @@ def create_pauli_rotation_circuit(N, dt, decomp):
     
     for pauli_str, coeff in decomp.items():
         
-        phase = coeff * dt  
+        phase = coeff * -dt  ## exp(-iHdt) --> -dt phase
         z_qubits = [i for i, p in enumerate(pauli_str) if p == 'Z'] 
         if len(z_qubits) == 0:
             continue

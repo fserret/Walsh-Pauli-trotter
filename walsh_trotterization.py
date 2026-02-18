@@ -317,7 +317,7 @@ def show_simulation_circuit(N, dt, V0=0,interpolate=False):
  
 if __name__ == "__main__":
 
-    N = 5
+    N = 10
     T_final = 1 
     dt = 0.01 
     n_steps = int(T_final / dt)
