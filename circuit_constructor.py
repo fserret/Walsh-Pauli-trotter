@@ -8,20 +8,20 @@ def create_pauli_rotation_circuit(N, dt, decomp):
     
     for pauli_str, coeff in decomp.items():
         
-        phase = coeff * -dt  ## exp(-iHdt) --> -dt phase
+        phase = coeff * dt  
         z_qubits = [i for i, p in enumerate(pauli_str) if p == 'Z'] 
         if len(z_qubits) == 0:
             continue
         
         q1 = z_qubits[0]
         if len(z_qubits) == 1:
-            qc.rz(2 * phase, q1)
+            qc.rz(2 * phase, q1) # \exp(-i\phi/2 \cdot Z)
             
         elif len(z_qubits) >= 2:
             for q2 in z_qubits[1:]: 
                 qc.cx(q2, q1)
                 
-            qc.rz(2 * phase, q1)
+            qc.rz(2 * phase, q1) 
             
             for q2 in z_qubits[1:]: 
                 qc.cx(q2, q1)
